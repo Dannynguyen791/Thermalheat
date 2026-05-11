@@ -1,0 +1,325 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D Heat Loss: Optimized UI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;700;800&family=JetBrains+Mono&display=swap');
+        body { margin: 0; background-color: #020408; color: #e2e8f0; font-family: 'Plus Jakarta Sans', sans-serif; overflow: hidden; }
+        canvas { display: block; }
+        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; display: flex; flex-direction: column; justify-content: space-between; }
+        .interactive { pointer-events: auto; }
+        .glass-panel { background: rgba(15, 23, 42, 0.6); backdrop-filter: blur(8px); border: 1px solid rgba(255,255,255,0.05); }
+        input[type=range] { -webkit-appearance: none; background: #1e293b; height: 3px; border-radius: 2px; width: 100%; }
+        input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 14px; height: 14px; background: #38bdf8; border-radius: 50%; cursor: pointer; border: 2px solid #fff; }
+        .label-tech { font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em; }
+        
+        .bar-container { height: 6px; background: #1e293b; border-radius: 3px; overflow: hidden; display: flex; }
+        .bar-rad { background: #f43f5e; transition: width 0.3s; }
+        .bar-conv { background: #fbbf24; transition: width 0.3s; }
+    </style>
+</head>
+<body>
+
+    <div class="ui-overlay p-4 md:p-6">
+        <!-- TOP SECTION: Branding & Composition -->
+        <div class="flex flex-col md:flex-row justify-between items-start gap-4">
+            <div class="glass-panel p-3 px-4 rounded-xl interactive">
+                <h1 class="text-lg font-black italic text-white tracking-tighter leading-none">THERMAL <span class="text-rose-500">PRO</span></h1>
+                <p class="text-[9px] text-slate-400 font-mono mt-1 uppercase">Đối lưu & Bức xạ 3D</p>
+            </div>
+            
+            <div class="glass-panel p-3 px-4 rounded-xl interactive w-full md:w-64">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="label-tech text-slate-300">Cơ cấu thất thoát</span>
+                    <span class="text-[9px] font-bold text-white"><span id="valRadPct">50</span>% / <span id="valConvPct">50</span>%</span>
+                </div>
+                <div class="bar-container">
+                    <div id="barRad" class="bar-rad" style="width: 50%"></div>
+                    <div id="barConv" class="bar-conv" style="width: 50%"></div>
+                </div>
+                <div class="flex justify-between mt-1 text-[8px] font-bold uppercase tracking-tighter">
+                    <span class="text-rose-400">Bức xạ</span>
+                    <span class="text-amber-400">Đối lưu</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN MIDDLE: This area is kept clear for 3D view -->
+        <div class="flex-grow"></div>
+
+        <!-- BOTTOM SECTION: Controls & Results -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+            
+            <!-- LEFT: Controls -->
+            <div class="lg:col-span-4 glass-panel p-4 rounded-2xl space-y-4 interactive max-w-sm">
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <span class="label-tech">Nhiệt độ ống</span>
+                        <span id="dispTf" class="text-[11px] font-bold text-rose-400">400°C</span>
+                    </div>
+                    <input type="range" id="tFluid" min="50" max="1000" value="400" oninput="updateValues()">
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1">
+                        <div class="flex justify-between mb-1">
+                            <span class="label-tech">Bảo ôn</span>
+                            <span id="dispThick" class="text-[11px] font-bold text-cyan-400">50mm</span>
+                        </div>
+                        <input type="range" id="thick" min="0" max="250" value="50" oninput="updateValues()">
+                    </div>
+                    <div class="flex-1">
+                        <div class="flex justify-between mb-1">
+                            <span class="label-tech">Gió</span>
+                            <span id="dispWind" class="text-[11px] font-bold text-amber-400">5m/s</span>
+                        </div>
+                        <input type="range" id="wind" min="0" max="40" value="5" oninput="updateValues()">
+                    </div>
+                </div>
+            </div>
+
+            <!-- RIGHT: Results -->
+            <div class="lg:col-span-8 glass-panel p-4 rounded-2xl interactive grid grid-cols-2 md:grid-cols-3 gap-4 border-t-2 border-rose-500/30">
+                <div class="space-y-1">
+                    <div class="label-tech">Thất thoát tổng</div>
+                    <div id="dispLoss" class="text-2xl font-black text-white">0 W/m</div>
+                    <div class="text-[9px] text-slate-400">R: <span id="valRadW" class="text-rose-400">0</span>W | C: <span id="valConvW" class="text-amber-400">0</span>W</div>
+                </div>
+                <div class="space-y-1 border-l border-white/10 pl-4">
+                    <div class="label-tech">Bề mặt ($T_s$)</div>
+                    <div id="dispTs" class="text-2xl font-black text-sky-400">0°C</div>
+                    <div id="safetyMsg" class="text-[9px] font-bold uppercase tracking-tighter">--</div>
+                </div>
+                <div class="col-span-2 md:col-span-1 space-y-1 border-l border-white/10 pl-4 bg-white/5 rounded-lg p-1">
+                    <div class="label-tech text-emerald-500">Tiết kiệm</div>
+                    <div id="effValue" class="text-2xl font-black text-emerald-400">0%</div>
+                    <div class="text-[9px] text-emerald-200/60 font-mono">Ước tính: <span id="dispSavings">+$0</span>/ngày</div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let scene, camera, renderer, pipeGroup;
+        let particlesRad = [], particlesConv = [];
+        let state = { tF: 400, thick: 50, wind: 5, loss: 0, ts: 0, lossBare: 0, qRad: 0, qConv: 0 };
+
+        function init3D() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x020408);
+            
+            camera = new THREE.PerspectiveCamera(35, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.set(7, 4, 9);
+            camera.lookAt(0, 0, 0);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.body.appendChild(renderer.domElement);
+
+            const ambient = new THREE.AmbientLight(0xffffff, 0.4);
+            scene.add(ambient);
+            const directional = new THREE.DirectionalLight(0xffffff, 0.8);
+            directional.position.set(5, 10, 7);
+            scene.add(directional);
+
+            pipeGroup = new THREE.Group();
+            scene.add(pipeGroup);
+
+            createPipes();
+            animate();
+        }
+
+        function createPipes() {
+            while(pipeGroup.children.length > 0) pipeGroup.remove(pipeGroup.children[0]);
+
+            const rSteel = 0.5;
+            const rIns = rSteel + (state.thick / 1000) * 4;
+
+            // Fluid Core
+            const fluidGeo = new THREE.CylinderGeometry(rSteel-0.03, rSteel-0.03, 6, 32);
+            const fluidMat = new THREE.MeshStandardMaterial({ 
+                color: 0xff2200, 
+                emissive: 0xff0000,
+                emissiveIntensity: state.tF / 600,
+                transparent: true,
+                opacity: 0.9
+            });
+            const fluid = new THREE.Mesh(fluidGeo, fluidMat);
+            fluid.rotation.z = Math.PI / 2;
+            pipeGroup.add(fluid);
+
+            // Insulation Layer
+            if (state.thick > 0) {
+                const insGeo = new THREE.CylinderGeometry(rIns, rIns, 6, 32);
+                const insMat = new THREE.MeshStandardMaterial({ 
+                    color: 0xe2e8f0, 
+                    roughness: 0.9,
+                    transparent: true, 
+                    opacity: 0.35
+                });
+                const ins = new THREE.Mesh(insGeo, insMat);
+                ins.rotation.z = Math.PI / 2;
+                pipeGroup.add(ins);
+            }
+            state.visualRadius = state.thick > 0 ? rIns : rSteel;
+        }
+
+        function createParticle(type) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = state.visualRadius;
+            const x = (Math.random() - 0.5) * 5.8;
+            const y = Math.cos(angle) * r;
+            const z = Math.sin(angle) * r;
+
+            const geo = new THREE.SphereGeometry(0.02, 6, 6);
+            let p, mat;
+
+            if (type === 'radiation') {
+                mat = new THREE.MeshBasicMaterial({ color: 0xf43f5e, transparent: true, opacity: 0.8 });
+                p = new THREE.Mesh(geo, mat);
+                p.position.set(x, y, z);
+                p.userData = {
+                    velocity: new THREE.Vector3(0, Math.cos(angle), Math.sin(angle)).multiplyScalar(0.035),
+                    life: 1.0,
+                    decay: 0.008 + Math.random() * 0.01
+                };
+                particlesRad.push(p);
+            } else {
+                mat = new THREE.MeshBasicMaterial({ color: 0xfbbf24, transparent: true, opacity: 0.6 });
+                p = new THREE.Mesh(geo, mat);
+                p.position.set(x, y, z);
+                p.userData = {
+                    velocity: new THREE.Vector3(state.wind * 0.004, 0.025 + Math.random() * 0.015, 0),
+                    life: 1.0,
+                    decay: 0.006 + Math.random() * 0.008
+                };
+                particlesConv.push(p);
+            }
+            scene.add(p);
+        }
+
+        function calculatePhysics() {
+            const d1 = 0.1, d2 = 0.11;
+            const d3 = d2 + (state.thick * 2 / 1000);
+            const hi = 500, kP = 50, kI = 0.04, eps = 0.9, sigma = 5.67e-8, tA = 25;
+            const ho = 5 + 3.0 * Math.pow(state.wind, 0.8);
+
+            // Bare pipe loss
+            let tb = state.tF - 20;
+            for(let i=0; i<5; i++) {
+                let hr = eps * sigma * (Math.pow(tb+273, 4)-Math.pow(tA+273, 4))/(tb-tA || 1);
+                state.lossBare = (state.tF - tA) / (1/(Math.PI*d1*hi) + Math.log(d2/d1)/(2*Math.PI*kP) + 1/(Math.PI*d2*(ho+hr)));
+                tb = state.tF - state.lossBare * (1/(Math.PI*d1*hi) + Math.log(d2/d1)/(2*Math.PI*kP));
+            }
+
+            // Actual insulated pipe loss
+            let ti = tA + 5;
+            for(let i=0; i<8; i++) {
+                let hr = eps * sigma * (Math.pow(ti+273, 4)-Math.pow(tA+273, 4))/(ti-tA || 1);
+                state.loss = (state.tF - tA) / (1/(Math.PI*d1*hi) + Math.log(d2/d1)/(2*Math.PI*kP) + Math.log(d3/d2)/(2*Math.PI*kI) + 1/(Math.PI*d3*(ho+hr)));
+                ti = state.tF - state.loss * (1/(Math.PI*d1*hi) + Math.log(d2/d1)/(2*Math.PI*kP) + Math.log(d3/d2)/(2*Math.PI*kI));
+                state.qRad = hr * (Math.PI * d3) * (ti - tA);
+                state.qConv = ho * (Math.PI * d3) * (ti - tA);
+            }
+            state.ts = ti;
+        }
+
+        function updateValues() {
+            state.tF = parseInt(document.getElementById('tFluid').value);
+            state.thick = parseInt(document.getElementById('thick').value);
+            state.wind = parseInt(document.getElementById('wind').value);
+
+            document.getElementById('dispTf').innerText = state.tF + "°C";
+            document.getElementById('dispThick').innerText = state.thick + "mm";
+            document.getElementById('dispWind').innerText = state.wind + "m/s";
+
+            calculatePhysics();
+
+            const total = state.qRad + state.qConv;
+            const pctRad = (state.qRad / total) * 100;
+            const pctConv = (state.qConv / total) * 100;
+
+            document.getElementById('valRadPct').innerText = Math.round(pctRad);
+            document.getElementById('valConvPct').innerText = Math.round(pctConv);
+            document.getElementById('barRad').style.width = pctRad + "%";
+            document.getElementById('barConv').style.width = pctConv + "%";
+            
+            document.getElementById('valRadW').innerText = Math.round(state.qRad);
+            document.getElementById('valConvW').innerText = Math.round(state.qConv);
+            document.getElementById('dispLoss').innerText = Math.round(total) + " W/m";
+            document.getElementById('dispTs').innerText = Math.round(state.ts) + "°C";
+            document.getElementById('effValue').innerText = Math.round((1 - total/state.lossBare)*100) + "%";
+            document.getElementById('dispSavings').innerText = "+$" + Math.round((state.lossBare - total) * 0.2);
+
+            const safety = document.getElementById('safetyMsg');
+            if(state.ts > 60) {
+                safety.innerText = "NGUY CƠ BỎNG NHIỆT";
+                safety.style.color = "#f43f5e";
+            } else {
+                safety.innerText = "BỀ MẶT AN TOÀN";
+                safety.style.color = "#10b981";
+            }
+
+            createPipes();
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            pipeGroup.rotation.y += 0.001;
+
+            if (state.qRad > 30) {
+                const count = Math.min(3, Math.ceil(state.qRad / 500));
+                for(let i=0; i<count; i++) createParticle('radiation');
+            }
+            if (state.qConv > 30) {
+                const count = Math.min(3, Math.ceil(state.qConv / 500));
+                for(let i=0; i<count; i++) createParticle('convection');
+            }
+
+            // Filter out dead particles
+            particlesRad = particlesRad.filter(p => {
+                p.position.add(p.userData.velocity);
+                p.userData.life -= p.userData.decay;
+                p.material.opacity = p.userData.life;
+                if (p.userData.life <= 0) { scene.remove(p); return false; }
+                return true;
+            });
+            particlesConv = particlesConv.filter(p => {
+                p.position.add(p.userData.velocity);
+                p.userData.life -= p.userData.decay;
+                p.material.opacity = p.userData.life;
+                if (p.userData.life <= 0) { scene.remove(p); return false; }
+                return true;
+            });
+
+            renderer.render(scene, camera);
+        }
+
+        let isDragging = false, prevX = 0, prevY = 0;
+        window.addEventListener('mousedown', () => isDragging = true);
+        window.addEventListener('mouseup', () => isDragging = false);
+        window.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                pipeGroup.rotation.y += (e.clientX - prevX) * 0.008;
+                pipeGroup.rotation.z += (e.clientY - prevY) * 0.008;
+            }
+            prevX = e.clientX; prevY = e.clientY;
+        });
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        window.onload = () => {
+            init3D();
+            updateValues();
+        };
+    </script>
+</body>
+</html>
