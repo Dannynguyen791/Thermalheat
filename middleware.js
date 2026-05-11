@@ -1,13 +1,13 @@
 import { next } from "@vercel/functions";
 
 export const config = {
-  matcher: ["/((?!favicon.ico).*)"],
+  matcher: ["/((?!api/|favicon.ico).*)"],
 };
 
 const COOKIE_NAME = "thermal_access";
 
 function getPassword() {
-  return process.env.WEB_PASSWORD || "thermal2026";
+  return (process.env.WEB_PASSWORD || "thermal2026").trim();
 }
 
 async function sha256(value) {
@@ -48,7 +48,7 @@ function loginPage(hasError = false) {
   </style>
 </head>
 <body>
-  <form method="POST" action="/login">
+  <form method="POST" action="/api/login">
     <h1>Thermal Pro</h1>
     <p>Nhap mat khau de truy cap mo phong.</p>
     <label for="password">Mat khau</label>
@@ -65,34 +65,11 @@ function loginPage(hasError = false) {
   });
 }
 
-async function handleLogin(request) {
-  const body = await request.text();
-  const submittedPassword = new URLSearchParams(body).get("password") || "";
-
-  if (submittedPassword !== getPassword()) {
-    return loginPage(true);
-  }
-
-  const token = await sha256(getPassword());
-
-  return new Response(null, {
-    status: 303,
-    headers: {
-      "Location": "/",
-      "Set-Cookie": `${COOKIE_NAME}=${token}; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=604800`,
-    },
-  });
-}
-
 export default async function middleware(request) {
   const url = new URL(request.url);
 
-  if (url.pathname === "/login" && request.method === "POST") {
-    return handleLogin(request);
-  }
-
   if (url.pathname === "/login") {
-    return loginPage();
+    return loginPage(url.searchParams.get("error") === "1");
   }
 
   const expectedToken = await sha256(getPassword());
